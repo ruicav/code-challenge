@@ -47,9 +47,9 @@ def merge_and_write():
     df_orders_details = pd.merge(df_orders, df_details, on="order_id")
     df_orders_details = df_orders_details.merge(
         df_products, on="product_id")
-    # engine = create_engine(
-    #     'postgresql+psycopg2://target_user:rui@target/target')
-    # df_orders_details.to_sql('order_detail', engine)
+    engine = create_engine(
+        'postgresql+psycopg2://target_user:foo@target/target')
+    df_orders_details.to_sql('order_detail', engine, if_exists='append', index=False)
 
 
 def print_final():

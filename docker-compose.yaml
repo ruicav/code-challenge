@@ -89,7 +89,6 @@ services:
       POSTGRES_USER: target_user
       POSTGRES_PASSWORD: foo
     volumes:
-      - ./dbdata:/var/lib/postgresql/data
       - ./data/target.sql:/docker-entrypoint-initdb.d/target.sql
     ports:
       - 5477:5432
