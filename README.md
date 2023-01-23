@@ -1,7 +1,7 @@
 ## para rodar:
 ```
 docker-compose up airflow-init (apenas a primeira vez)
-docker-compose up
+DAY=1 MONTH=1 YEAR=2023 docker-compose up
 ```
 <p> O airflow estará acessível em http://localhost:8080/. Username: airflow , Password: airflow. </p>
 <p> O DAG com o pipeline é o indicium_challenge. Após executado, o JSON do GET pode ser acessado em http://localhost:3000/. </p>
