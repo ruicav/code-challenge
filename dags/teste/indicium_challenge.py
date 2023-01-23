@@ -1,13 +1,13 @@
 import psycopg2
 import os
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from sqlalchemy import create_engine
 
-POSTGRESS_DIR = 'postgres_data'
+POSTGRES_DIR = 'postgres_data'
 CSV_DIR = 'csv_data'
 
 SOURCE_HOST = "db"
@@ -23,10 +23,15 @@ TARGET_DB = "target"
 TARGET_USER = "target_user"
 TARGET_PWD = "foo"
 
-START_DATE_YEAR = 22
+START_DATE_YEAR = 2023
 START_DATE_MONTH = 1
-START_DATE_DAY = 2023
+START_DATE_DAY = 1
 
+TODAY = datetime.now()
+
+
+def format_postgres_dir(day, month, year):
+    return POSTGRES_DIR + "/" + str(year) + "-" + str(month) + "-" + str(day)
 
 
 def create_csv_from_tables(**kwargs):
@@ -35,17 +40,19 @@ def create_csv_from_tables(**kwargs):
     cursor = connection.cursor()
     cursor.execute("""SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public'""")
-
-    # TODO usar kwargs para parametrizar diretorio dos csvs
-    # param = kwargs['params']['param']
-
-    if not os.path.exists(POSTGRESS_DIR):
-        os.makedirs(POSTGRESS_DIR)
+    day = kwargs['params']['day']
+    month = kwargs['params']['month']
+    year = kwargs['params']['year']
+    postgres_date_dir = format_postgres_dir(day=day, month=month, year=year)
+    if not os.path.exists(POSTGRES_DIR):
+        os.makedirs(POSTGRES_DIR)
+    if not os.path.exists(postgres_date_dir):
+        os.makedirs(postgres_date_dir)
     for table in cursor.fetchall():
         table_name = ''.join(table)
         dataframe = pd.read_sql("select * from " + table_name, connection)
         dataframe.to_csv(os.path.join(
-            POSTGRESS_DIR, table_name+".csv"), index=False)
+            postgres_date_dir, table_name+".csv"), index=False)
 
 
 def extract_csv():
@@ -56,11 +63,15 @@ def extract_csv():
         CSV_DIR, "details.csv"), index=False)
 
 
-def merge_and_write():
-    df_orders = pd.read_csv(POSTGRESS_DIR + "/orders.csv")
+def merge_and_write(**kwargs):
+    day = kwargs['params']['day']
+    month = kwargs['params']['month']
+    year = kwargs['params']['year']
+    postgres_date_dir = format_postgres_dir(day=day, month=month, year=year)
+    df_orders = pd.read_csv(postgres_date_dir + "/orders.csv")
     df_orders = df_orders["order_id"]
     df_products = pd.read_csv(
-        POSTGRESS_DIR + "/products.csv")
+        postgres_date_dir + "/products.csv")
     df_products = df_products[["product_id", "product_name"]]
     df_details = pd.read_csv(CSV_DIR + "/details.csv")
 
@@ -70,34 +81,35 @@ def merge_and_write():
     #TODO adicionar data de insercao no bd?
     engine = create_engine(
         'postgresql+psycopg2://' + TARGET_USER + ':' + TARGET_PWD + '@' + TARGET_HOST + '/' + TARGET_DB)
+    df_orders_details.to_sql('order_detail', engine, if_exists='append', index=False)
     df_orders_details.to_sql(TARGET_TABLE_NAME, engine, if_exists='append', index=False)
 
 
 def print_final():
-    connection = psycopg2.connect(host=TARGET_HOST, database=TARGET_DB, user=TARGET_DB,
+    connection = psycopg2.connect(host=TARGET_HOST, database=TARGET_DB, user=TARGET_USER,
                                   password=TARGET_PWD)
     dataframe = pd.read_sql("select * from order_detail", connection)
     print(dataframe)
 
-
 default_args = {
     'owner': 'the-people',
-    'day': os.environ.get('DAY'),
-    'month': os.environ.get('MONTH'),
-    'year': os.environ.get('YEAR')
+    'day': os.environ.get('DAY') if os.environ.get('DAY') else TODAY.day,
+    'month': os.environ.get('MONTH') if os.environ.get('MONTH') else TODAY.month,
+    'year': os.environ.get('YEAR') if os.environ.get('YEAR') else TODAY.year
 }
 
 indicium_challenge = DAG(
     'indicium_challenge',
     default_args=default_args,
-    start_date=datetime(START_DATE_YEAR, START_DATE_MONTH, START_DATE_DAY)
+    start_date=datetime(START_DATE_YEAR, START_DATE_MONTH, START_DATE_DAY),
+    schedule_interval=timedelta(days=1)
 )
-#TODO parametrizar o dia com variavel de ambiente ou default args?
+
 task_1 = PythonOperator(
     task_id='create_csv_from_tables',
     python_callable=create_csv_from_tables,
     provide_context=True,
-    params={'param': 'default_param'},
+    params=default_args,
     dag=indicium_challenge
 )
 
@@ -110,6 +122,8 @@ task_2 = PythonOperator(
 task_3 = PythonOperator(
     task_id='merge_and_write',
     python_callable=merge_and_write,
+    provide_context=True,
+    params=default_args,
     dag=indicium_challenge
 )
 
