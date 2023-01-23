@@ -60,7 +60,7 @@ services:
       - ./app:/app
     ports:
       - 3000:3000
-    command: [ "npm", "start" ]
+    command: ["sh", "-c", "npm i && node server.js"]
     depends_on:
       - target
 
