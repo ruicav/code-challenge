@@ -33,7 +33,34 @@ TODAY = datetime.now()
 def format_postgres_dir(day, month, year):
     return POSTGRES_DIR + "/" + str(year) + "-" + str(month) + "-" + str(day)
 
-
+# todo
+# Here are a few ways to potentially improve the performance of the create_csv_from_tables() function:
+#
+# Use a connection pool: Instead of creating a new connection to the database each time the function is called,
+# use a connection pool to reuse existing connections. This can help reduce the overhead of creating new connections
+# and can improve performance.
+#
+# Use the fetchmany() method: Instead of using the fetchall() method to retrieve all the rows at once,
+# use the fetchmany() method to retrieve a smaller number of rows at a time.
+# This can help reduce the memory footprint of the function and can improve performance.
+#
+# Use the concurrent.futures module: Use the concurrent.futures module to create a pool of worker threads
+# that can handle the creation of the CSV files in parallel.
+# This can help improve performance by taking advantage of multiple cores on the machine.
+#
+# Use the to_csv() method with the chunksize parameter: Instead of loading all the data into memory and then
+# writing it to the CSV file, use the to_csv() method with the chunksize parameter to write the data
+# in smaller chunks to the file. This can help reduce the memory footprint of the function and can improve performance.
+#
+# Use the os.path.exists() method with the os.makedirs() method: Instead of using the os.path.exists()
+# method to check if the directory exists and then creating it, use the os.makedirs() method with
+# the exist_ok=True parameter to create the directory if it doesn't exist and avoid the overhead of checking
+# if it exists.
+#
+# Refactor your code to use pandas' to_sql() method instead of to_csv() method and use the if_exists='replace'
+# option to overwrite the CSV file if it already exists.
+#
+# Please note that this list of recommendations is not exhaustive and there may be other ways to
 def create_csv_from_tables(**kwargs):
     connection = psycopg2.connect(host=SOURCE_HOST, database=SOURCE_DB, user=SOURCE_USER,
                                   password=SOURCE_PWD)
