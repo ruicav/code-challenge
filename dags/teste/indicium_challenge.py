@@ -33,6 +33,7 @@ TODAY = datetime.now()
 def format_postgres_dir(day, month, year):
     return POSTGRES_DIR + "/" + str(year) + "-" + str(month) + "-" + str(day)
 
+
 # todo
 # Here are a few ways to potentially improve the performance of the create_csv_from_tables() function:
 #
@@ -77,9 +78,8 @@ def create_csv_from_tables(**kwargs):
         os.makedirs(postgres_date_dir)
     for table in cursor.fetchall():
         table_name = ''.join(table)
-        dataframe = pd.read_sql("select * from " + table_name, connection)
-        dataframe.to_csv(os.path.join(
-            postgres_date_dir, table_name+".csv"), index=False)
+        for dataframe in pd.read_sql_query("select * from " + table_name, connection, chunksize=1000):
+            dataframe.to_csv(os.path.join(postgres_date_dir, table_name + ".csv"), index=False, mode='a')
 
 
 def extract_csv():
@@ -90,26 +90,47 @@ def extract_csv():
         CSV_DIR, "details.csv"), index=False)
 
 
+# Use the read_csv() method with the chunksize parameter: Instead of loading all the data into memory at once,
+# use the read_csv() method with the chunksize parameter to read the data in smaller chunks.
+# This can help reduce the memory footprint of the function and can improve performance.
+#
+# Use the concurrent.futures module: Use the concurrent.futures module to create a pool of worker threads
+# that can handle the merging and writing of the data in parallel.
+# This can help improve performance by taking advantage of multiple cores on the machine.
+#
+# Use the merge() method with the how parameter: Instead of using the merge() method twice,
+# use the how parameter to specify the type of merge that you want to perform. This can help reduce the number
+# of operations performed and can improve performance.
+#
+# Use the to_sql() method with the if_exists='replace' option: Instead of appending the data to the table
+# each time the function is called, use the if_exists='replace' option to overwrite the table if it already exists.
+#
+# Use a connection pool: Instead of creating a new connection to the database each time the function is called,
+# use a connection pool to reuse existing connections. This can help reduce the overhead of creating
+# new connections and can improve performance
 def merge_and_write(**kwargs):
     day = kwargs['params']['day']
     month = kwargs['params']['month']
     year = kwargs['params']['year']
     postgres_date_dir = format_postgres_dir(day=day, month=month, year=year)
-    df_orders = pd.read_csv(postgres_date_dir + "/orders.csv")
+    df_orders = pd.DataFrame()
+    for chunk in pd.read_csv(postgres_date_dir + "/orders.csv", chunksize=1000):
+        df_orders = pd.concat([df_orders, chunk], ignore_index=True)
     df_orders = df_orders["order_id"]
-    df_products = pd.read_csv(
-        postgres_date_dir + "/products.csv")
+    df_products = pd.DataFrame()
+    for chunk in pd.read_csv(postgres_date_dir + "/products.csv", chunksize=1000):
+        df_products = pd.concat([df_products, chunk], ignore_index=True)
     df_products = df_products[["product_id", "product_name"]]
-    df_details = pd.read_csv(CSV_DIR + "/details.csv")
-
+    df_details = pd.DataFrame()
+    for chunk in pd.read_csv(CSV_DIR + "/details.csv", chunksize=1000):
+        df_details = pd.concat([df_details, chunk], ignore_index=True)
     df_orders_details = pd.merge(df_orders, df_details, on="order_id")
-    df_orders_details = df_orders_details.merge(
-        df_products, on="product_id")
-    #TODO adicionar data de insercao no bd?
-    engine = create_engine(
-        'postgresql+psycopg2://' + TARGET_USER + ':' + TARGET_PWD + '@' + TARGET_HOST + '/' + TARGET_DB)
-    df_orders_details.to_sql('order_detail', engine, if_exists='append', index=False)
-    df_orders_details.to_sql(TARGET_TABLE_NAME, engine, if_exists='append', index=False)
+    df_orders_details = pd.merge(df_orders_details, df_products, on="product_id")
+    print(df_orders_details)
+    # TODO adicionar data de insercao no bd?
+    # engine = create_engine(
+    #     'postgresql+psycopg2://' + TARGET_USER + ':' + TARGET_PWD + '@' + TARGET_HOST + '/' + TARGET_DB)
+    # df_orders_details.to_sql(TARGET_TABLE_NAME, engine, if_exists='replace', index=False)
 
 
 def print_final():
@@ -117,6 +138,7 @@ def print_final():
                                   password=TARGET_PWD)
     dataframe = pd.read_sql("select * from order_detail", connection)
     print(dataframe)
+
 
 default_args = {
     'owner': 'the-people',
